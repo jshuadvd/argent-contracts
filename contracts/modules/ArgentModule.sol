@@ -39,7 +39,7 @@ contract ArgentModule is BaseModule, RelayerManager, SecurityManager, Transactio
      * @inheritdoc IModule
      */
     function init(address _wallet) external override onlyWallet(_wallet) {
-        enableStaticCall(_wallet);
+        enableDefaultStaticCalls(_wallet);
     }
 
     /**
@@ -62,6 +62,7 @@ contract ArgentModule is BaseModule, RelayerManager, SecurityManager, Transactio
         if (methodId == TransactionManager.multiCall.selector ||
             methodId == TransactionManager.addToWhitelist.selector ||
             methodId == TransactionManager.removeFromWhitelist.selector ||
+            methodId == TransactionManager.enableERC1155TokenReceiver.selector ||
             methodId == ArgentModule.addModule.selector ||
             methodId == SecurityManager.addGuardian.selector ||
             methodId == SecurityManager.revokeGuardian.selector ||
