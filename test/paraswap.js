@@ -41,7 +41,7 @@ const TokenPriceRegistry = artifacts.require("TokenPriceRegistry");
 const { makePathes } = require("../utils/paraswap/sell-helper");
 const { makeRoutes } = require("../utils/paraswap/buy-helper");
 const utils = require("../utils/utilities.js");
-const { ETH_TOKEN, ARGENT_WHITELIST } = require("../utils/utilities.js");
+const { ETH_TOKEN } = require("../utils/utilities.js");
 
 const ZERO_BYTES32 = ethers.constants.HashZero;
 const ZERO_ADDRESS = ethers.constants.AddressZero;
@@ -162,8 +162,8 @@ contract("ArgentModule", (accounts) => {
     manager = new RelayManager(guardianStorage.address, tokenPriceRegistry.address);
 
     filter = await Filter.new(tokenPriceRegistry.address);
-    await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, paraswap.address, filter.address);
-    await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, paraswapProxy, ZERO_ADDRESS);
+    await authoriser.addAuthorisationToRegistry(0, paraswap.address, filter.address);
+    await authoriser.addAuthorisationToRegistry(0, paraswapProxy, ZERO_ADDRESS);
   });
 
   beforeEach(async () => {

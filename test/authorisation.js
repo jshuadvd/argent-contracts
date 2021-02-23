@@ -21,7 +21,7 @@ const Filter = artifacts.require("TestFilter");
 
 const { assert } = require("chai");
 const utils = require("../utils/utilities.js");
-const { ETH_TOKEN, ARGENT_WHITELIST } = require("../utils/utilities.js");
+const { ETH_TOKEN } = require("../utils/utilities.js");
 
 const ZERO_BYTES32 = ethers.constants.HashZero;
 const ZERO_ADDRESS = ethers.constants.AddressZero;
@@ -74,7 +74,7 @@ contract("ArgentModule", (accounts) => {
       RECOVERY_PERIOD);
 
     await registry.registerModule(module.address, ethers.utils.formatBytes32String("ArgentModule"));
-    await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, relayer, ZERO_ADDRESS);
+    await authoriser.addAuthorisationToRegistry(0 /* Argent Default Registry */, relayer, ZERO_ADDRESS);
 
     filter = await Filter.new();
 
@@ -126,8 +126,8 @@ contract("ArgentModule", (accounts) => {
   describe("call authorised contract", () => {
     beforeEach(async () => {
       initNonce();
-      await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, contract.address, filter.address);
-      await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, recipient, ZERO_ADDRESS);
+      await authoriser.addAuthorisationToRegistry(0, contract.address, filter.address);
+      await authoriser.addAuthorisationToRegistry(0, recipient, ZERO_ADDRESS);
     });
 
     it("should send ETH to authorised address", async () => {
@@ -188,8 +188,8 @@ contract("ArgentModule", (accounts) => {
   describe("approve token and call authorised contract", () => {
     beforeEach(async () => {
       await initNonce();
-      await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, contract.address, filter.address);
-      await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, recipient, ZERO_ADDRESS);
+      await authoriser.addAuthorisationToRegistry(0, contract.address, filter.address);
+      await authoriser.addAuthorisationToRegistry(0, recipient, ZERO_ADDRESS);
     });
 
     it("should call authorised contract when filter pass", async () => {

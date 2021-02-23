@@ -18,7 +18,6 @@ const ArgentModule = artifacts.require("ArgentModule");
 const Authoriser = artifacts.require("DappRegistry");
 
 const utils = require("../utils/utilities.js");
-const { ARGENT_WHITELIST } = require("../utils/utilities.js");
 
 const ZERO_ADDRESS = ethers.constants.AddressZero;
 const SECURITY_PERIOD = 2;
@@ -67,7 +66,7 @@ contract("ArgentModule", (accounts) => {
       RECOVERY_PERIOD);
 
     await registry.registerModule(module.address, ethers.utils.formatBytes32String("ArgentModule"));
-    await authoriser.addAuthorisationToRegistry(ARGENT_WHITELIST, relayer, ZERO_ADDRESS);
+    await authoriser.addAuthorisationToRegistry(0, relayer, ZERO_ADDRESS);
 
     walletImplementation = await BaseWallet.new();
 
