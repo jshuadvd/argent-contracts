@@ -21,6 +21,11 @@ contract DappRegistry is IAuthoriser, Storage, Owned {
     event RegistryCreated(uint8 registryId, address manager);
     event RegistryRemoved(uint8 registryId);
 
+    function isEnabledRegistry(address _wallet, uint8 _registryId) external view returns (bool) {
+        uint registries = uint(enabledRegistryIds[_wallet]);
+        return ((registries >> _registryId) & 1) > 0;
+    }
+
     function isAuthorised(address _wallet, address _contract, bytes calldata _data) external view override returns (bool) {
         (bool isActive, address filter) = getFilter(_wallet, _contract);
         if (isActive) {
@@ -37,7 +42,6 @@ contract DappRegistry is IAuthoriser, Storage, Owned {
         enabledRegistryIds[_wallet] = bytes32(registries ^ (uint(1) << _registryId)); // toggle [_registryId]^th bit
     }
 
-    // Do we want to let the owner to delete a registry?
     function createRegistry(uint8 _registryId, address _manager) external onlyOwner {
         require(_registryId > 0 && _manager != address(0), "DR: invalid parameters");
         require(registryManagers[_registryId] == address(0), "DR: duplicate registry");

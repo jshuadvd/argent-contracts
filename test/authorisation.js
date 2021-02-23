@@ -30,6 +30,8 @@ const SECURITY_WINDOW = 2;
 const LOCK_PERIOD = 4;
 const RECOVERY_PERIOD = 4;
 
+const CUSTOM_REGISTRY_ID = 12;
+
 const RelayManager = require("../utils/relay-manager");
 
 contract("ArgentModule", (accounts) => {
@@ -37,8 +39,10 @@ contract("ArgentModule", (accounts) => {
 
   const infrastructure = accounts[0];
   const owner = accounts[1];
+  const nonwhitelisted = accounts[3];
   const recipient = accounts[4];
   const nonceInitialiser = accounts[4];
+  const registryManager = accounts[5];
   const relayer = accounts[9];
 
   let registry;
@@ -52,6 +56,7 @@ contract("ArgentModule", (accounts) => {
   let filter;
   let authoriser;
   let contract;
+  let contract2;
 
   before(async () => {
     registry = await Registry.new();
@@ -74,14 +79,40 @@ contract("ArgentModule", (accounts) => {
       RECOVERY_PERIOD);
 
     await registry.registerModule(module.address, ethers.utils.formatBytes32String("ArgentModule"));
-    await authoriser.addAuthorisationToRegistry(0 /* Argent Default Registry */, relayer, ZERO_ADDRESS);
 
+    // setup DappRegistry
+    contract = await TestContract.new();
+    contract2 = await TestContract.new();
+    assert.equal(await contract.state(), 0, "initial contract state should be 0");
+    assert.equal(await contract2.state(), 0, "initial contract2 state should be 0");
     filter = await Filter.new();
+    await authoriser.createRegistry(CUSTOM_REGISTRY_ID, registryManager);
+    await authoriser.addAuthorisationToRegistry(0, contract.address, filter.address);
+    await authoriser.addAuthorisationToRegistry(CUSTOM_REGISTRY_ID, contract2.address, filter.address, { from: registryManager });
+    await authoriser.addAuthorisationToRegistry(0, recipient, ZERO_ADDRESS);
+    await authoriser.addAuthorisationToRegistry(0 /* Argent Default Registry */, relayer, ZERO_ADDRESS);
 
     walletImplementation = await BaseWallet.new();
 
     manager = new RelayManager(guardianStorage.address, ZERO_ADDRESS);
   });
+
+  async function enableCustomRegistry() {
+    assert.equal(await authoriser.isEnabledRegistry(wallet.address, CUSTOM_REGISTRY_ID), false, "custom registry should not be enabled");
+    const txReceipt = await manager.relay(
+      module,
+      "toggleDappRegistry",
+      [wallet.address, CUSTOM_REGISTRY_ID, true],
+      wallet,
+      [owner],
+      1,
+      ETH_TOKEN,
+      relayer);
+    const success = await utils.parseRelayReceipt(txReceipt).success;
+    assert.isTrue(success, "toggleDappRegistry failed");
+    assert.equal(await authoriser.isEnabledRegistry(wallet.address, CUSTOM_REGISTRY_ID), true, "custom registry should be enabled");
+    console.log("Gas to call toggleDappRegistry: ", txReceipt.gasUsed);
+  }
 
   beforeEach(async () => {
     const proxy = await Proxy.new(walletImplementation.address);
@@ -93,8 +124,7 @@ contract("ArgentModule", (accounts) => {
     erc20 = await ERC20.new([infrastructure, wallet.address], 10000000, decimals); // TOKN contract with 10M tokens (5M TOKN for wallet and 5M TOKN for account[0])
     await wallet.send(new BN("1000000000000000000"));
 
-    contract = await TestContract.new();
-    assert.equal(await contract.state(), 0, "initial contract state should be 0");
+    await enableCustomRegistry();
   });
 
   async function encodeTransaction(to, value, data, isSpenderInData) {
@@ -123,11 +153,9 @@ contract("ArgentModule", (accounts) => {
     assert.isTrue(success, "transfer failed");
   }
 
-  describe("call authorised contract", () => {
+  describe("call (un)authorised contract", () => {
     beforeEach(async () => {
       initNonce();
-      await authoriser.addAuthorisationToRegistry(0, contract.address, filter.address);
-      await authoriser.addAuthorisationToRegistry(0, recipient, ZERO_ADDRESS);
     });
 
     it("should send ETH to authorised address", async () => {
@@ -147,7 +175,7 @@ contract("ArgentModule", (accounts) => {
       console.log("Gas to send ETH: ", txReceipt.gasUsed);
     });
 
-    it("should call authorised contract when filter pass", async () => {
+    it("should call authorised contract when filter passes (argent registry)", async () => {
       const data = contract.contract.methods.setState(4).encodeABI();
       const transaction = await encodeTransaction(contract.address, 0, data, false);
 
@@ -166,6 +194,25 @@ contract("ArgentModule", (accounts) => {
       console.log("Gas to call contract: ", txReceipt.gasUsed);
     });
 
+    it("should call authorised contract when filter passes (community registry)", async () => {
+      const data = contract2.contract.methods.setState(4).encodeABI();
+      const transaction = await encodeTransaction(contract2.address, 0, data, false);
+
+      const txReceipt = await manager.relay(
+        module,
+        "multiCall",
+        [wallet.address, [transaction]],
+        wallet,
+        [owner],
+        10,
+        ETH_TOKEN,
+        relayer);
+      const success = await utils.parseRelayReceipt(txReceipt).success;
+      assert.isTrue(success, "call failed");
+      assert.equal(await contract.state(), 4, "contract state should be 4");
+      console.log("Gas to call contract: ", txReceipt.gasUsed);
+    });
+
     it("should block call to authorised contract when filter doesn't pass", async () => {
       const data = contract.contract.methods.setState(5).encodeABI();
       const transaction = await encodeTransaction(contract.address, 0, data, false);
@@ -178,9 +225,26 @@ contract("ArgentModule", (accounts) => {
         [owner],
         10,
         ETH_TOKEN,
-        recipient);
+        relayer);
       const { success, error } = await utils.parseRelayReceipt(txReceipt);
       assert.isFalse(success, "call should have failed");
+      assert.equal(error, "TM: call not authorised");
+    });
+
+    it("should not send ETH to unauthorised address", async () => {
+      const transaction = await encodeTransaction(nonwhitelisted, 100, ZERO_BYTES32, false);
+
+      const txReceipt = await manager.relay(
+        module,
+        "multiCall",
+        [wallet.address, [transaction]],
+        wallet,
+        [owner],
+        10,
+        ETH_TOKEN,
+        relayer);
+      const { success, error } = await utils.parseRelayReceipt(txReceipt);
+      assert.isFalse(success, "transfer should have failed");
       assert.equal(error, "TM: call not authorised");
     });
   });
@@ -211,7 +275,7 @@ contract("ArgentModule", (accounts) => {
         [owner],
         10,
         ETH_TOKEN,
-        recipient);
+        relayer);
       const success = await utils.parseRelayReceipt(txReceipt).success;
       assert.isTrue(success, "call failed");
       assert.equal(await contract.state(), 4, "contract state should be 4");
@@ -237,7 +301,7 @@ contract("ArgentModule", (accounts) => {
         [owner],
         10,
         ETH_TOKEN,
-        recipient);
+        relayer);
       const { success, error } = await utils.parseRelayReceipt(txReceipt);
       assert.isFalse(success, "call should have failed");
       assert.equal(error, "TM: call not authorised");
